@@ -150,7 +150,8 @@ print(model_performance)
 rpart.plot(tree_fit$fit, type = 4, extra = 101, under = TRUE, cex = 0.8, box.palette = "auto")
 rules <- rpart.rules(tree_fit$fit)
 print(rules)
-new_data <- tribble(
-  ~crim, ~zn, ~indus, ~chas, ~nox, ~rm, ~age, ~dis, ~rad, ~tax, ~ptratio, ~black, ~lstat,
-  0.03237, 0, 2.18, 0, 0.458, 6.998, 45.8, 6.0622, 3, 222, 18.7, 394.63, 2.94
-)
+
+var_importance <- vip::vip(tree_fit, num_features = 10)
+print(var_importance)
+
+# 2. autoencoders
