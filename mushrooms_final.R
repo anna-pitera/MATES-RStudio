@@ -11,7 +11,7 @@ library(vip) # for feature importance (aka how big of an impact each feature has
 library(pdp) # for feature effects (aka the effect of changes in the value of each feature on the model's predictions)
 library(tidymodels) # for second attempt at decision tree (CART)
 library(tidyr) # for second attempt at decision tree
-library(rattle) # for plotting decision tree in a more aesthetically pleasing way
+library(earth) # for multivariate adaptive regression splines (MARS)
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv") # includes target column (that's why it's called "all")
@@ -156,3 +156,10 @@ var_importance <- vip::vip(tree_fit, num_features = 10)
 print(var_importance)
 
 # 2. multivariate adaptive regression splines (MARS)
+mars_fit <- earth(
+  poisonous ~ .,  
+  data = train   
+)
+
+print(mars_fit)
+plot(mars_fit, which = 1)
