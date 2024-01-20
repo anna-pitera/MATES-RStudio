@@ -7,34 +7,34 @@ library(DataExplorer) # for auto EDA
 library(caTools) # for splitting data into training and test set
 library(rpart) # for decision tree (CART)
 library(rpart.plot) # for plotting decision trees
-library(tree) # FILL IN
 library(vip) # for feature importance (aka how big of an impact each feature has on the target prediction)
 library(pdp) # for feature effects (aka the effect of changes in the value of each feature on the model's predictions)
+library(tidymodels)
 
 # read in and view dataset - 8124 rows and 23 columns
-mushrooms <- read_csv("mushrooms.csv")
+mushrooms_all <- read_csv("mushrooms.csv") # includes target column (that's why it's called "all")
 view(mushrooms)
 
 # check for na values - there are none
-colSums(is.na(mushrooms))
+colSums(is.na(mushrooms_all))
 
 # convert boolean column ("bruises") into binary ints
-mushrooms$bruises <- as.integer(as.logical(mushrooms$bruises))
-view(mushrooms)
+mushrooms_all$bruises <- as.integer(as.logical(mushrooms_all$bruises))
+view(mushrooms_all)
 
 # target column ("poisonous") is written as p = poisonous and e = edible
 # but it'd be better if it were just binary, with poisonous = 1 and edible = 0
 # convert target column ("poisonous") into binary ints
-mushrooms$poisonous <- factor(mushrooms$poisonous, levels=c("p", "e"), labels=c(1, 0)) # first convert vectors to factors, then replace with labels
+mushrooms_all$poisonous <- factor(mushrooms_all$poisonous, levels=c("p", "e"), labels=c(1, 0)) # first convert vectors to factors, then replace with labels
 view(mushrooms)
 
 # one-hot encoding categorical variables using caret
-colnames(mushrooms) # get col names
+colnames(mushrooms_all) # get col names
 # at this point, i figured out that "veil_type" only has one value ("p") across the entire dataset
 # after looking at stack overflow for a bit, i decided i should drop "veil_type" because
 # R isn't going to let me encode it or use it in machine learning algorithms (because it has only one value)
 # and dropping it isn't going to hurt anything because it's the same value ("p") for every row
-mushrooms <- subset(mushrooms, select = -c(veil_type)) # drop "veil_type"
+mushrooms_all <- subset(mushrooms_all, select = -c(veil_type)) # drop "veil_type"
 # back to encoding
 cols <- c("cap_shape", "cap_surface", "cap_color", "bruises",
           "odor", "gill_attachment", "gill_spacing",
@@ -46,7 +46,7 @@ cols <- c("cap_shape", "cap_surface", "cap_color", "bruises",
           "population", "habitat"
           ) # every column except "poisonous" because it's the target
 # so "poisonous" aka the target column has been dropped at this point
-mushrooms[cols] <- lapply(mushrooms[cols], factor) # convert selected columns to factors for encoding
+mushrooms[cols] <- lapply(mushrooms_all[cols], factor) # convert selected columns to factors for encoding
 dv <- caret::dummyVars(" ~ cap_shape + cap_surface + cap_color + bruises +
                        odor + gill_attachment + gill_spacing +
                        gill_size + gill_color + stalk_shape +
@@ -71,23 +71,33 @@ view(mushrooms) # columns are all encoded
 # 80% train to 20% test ratio
 sample <- sample.split(mushrooms$cap_shape.b, SplitRatio = 0.8)
 train <- subset(mushrooms, sample == TRUE)
-test <- subset(mushrooms, sample == FALSE)
+test <- subset(mushrooms_all, sample == FALSE)
 view(train) # 6500 rows
 view(test) # 1624 rows
 
-# converting data (which is a list) into a numeric vector so the model can understand it
-train <- data.frame(cols=unlist(cols(train)))
+# converting data (which is a list) into a numeric vector so the model can use it
+train <- lapply(train, as.numeric)
 
 # now it's time for the actual machine learning algorithms!
 
 # 1. decision tree (CART) model
 # i'll be using the "rpart" package, which is regarded as being much faster than other packages like "tree"
 dt1 <- rpart(
+  formula = cap_shape.b ~ ., # "~ . " selects all features as well as cap_shape.b
+  data    = train,
+  method  = "anova" # by default, rpart tries its best to assume what fitting method to use, but it's best to specify in the beginning
+)
+dt1 # run decision tree
+rpart.plot(dt1) # plot decision tree
+summary(dt1) # tells us the number of observations in each node, splits, terminal nodes, etc
+plotcp(dt1) # plots elbow chart using rpart's automatic pruning
+# but let's see what the elbow chart looks like without any pruning
+dt2 <- rpart(
   formula = cap_shape.b ~ .,
   data    = train,
-  method  = "anova" # by default, rpart tries its best to assume what fitting method it uses, but it's best to specify in the beginning
+  method  = "anova",
+  control = list(cp = 0, xval = 10) # generates full tree
 )
-
-dt1
-
-rpart.plot(dt1)
+dt2
+plotcp(dt2) # this plot shows that the error percentage plateaus at 13 terminal nodes
+# so it's best optimized at 13 terminal nodes
