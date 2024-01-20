@@ -11,6 +11,7 @@ library(vip) # for feature importance (aka how big of an impact each feature has
 library(pdp) # for feature effects (aka the effect of changes in the value of each feature on the model's predictions)
 library(tidymodels) # for second attempt at decision tree (CART)
 library(tidyr) # for second attempt at decision tree
+library(rattle) # for plotting decision tree in a more aesthetically pleasing way
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv") # includes target column (that's why it's called "all")
@@ -147,11 +148,11 @@ model_performance <- test %>%
   metrics(truth = poisonous, estimate = factor(predictions))
 print(model_performance)
 
-rpart.plot(tree_fit$fit, type = 4, extra = 101, under = TRUE, cex = 0.8, box.palette = "auto")
+rpart.plot(tree_fit$fit, type = 1, extra = 100, under = TRUE, box.palette = "Rd", branch.lty = 1, branch.col = "gray40", split.lwd = 10)
 rules <- rpart.rules(tree_fit$fit)
 print(rules)
 
 var_importance <- vip::vip(tree_fit, num_features = 10)
 print(var_importance)
 
-# 2. autoencoders
+# 2. multivariate adaptive regression splines (MARS)
