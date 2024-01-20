@@ -24,7 +24,7 @@ mushrooms$bruises <- as.integer(as.logical(mushrooms$bruises))
 view(mushrooms)
 
 # grab poisonous column to save for later
-poisonous_col <- data.frame(mushrooms$poisonous)
+poisonous_col <- data.frame(mushrooms["poisonous"])
 view(poisonous_col)
 
 # # target column ("poisonous") is written as p = poisonous and e = edible
@@ -50,6 +50,7 @@ cols <- c("cap_shape", "cap_surface", "cap_color", "bruises",
           "ring_number", "ring_type", "spore_print_color",
           "population", "habitat"
           )
+view(mushrooms)
 mushrooms[cols] <- lapply(mushrooms[cols], factor) # convert selected columns to factors for encoding
 dv <- caret::dummyVars(" ~ cap_shape + cap_surface + cap_color + bruises +
                        odor + gill_attachment + gill_spacing +
@@ -61,6 +62,11 @@ dv <- caret::dummyVars(" ~ cap_shape + cap_surface + cap_color + bruises +
                        population + habitat", data = mushrooms) # assign dummy variables to each column
 mushrooms <- data.frame(predict(dv, newdata = mushrooms)) # convert to data frame so it's viewable
 view(mushrooms) # columns are all encoded
+
+view(poisonous_col)
+
+mushrooms["poisonous"] <- data.frame(poisonous_col["poisonous"])
+view(mushrooms)
 
 # # auto EDA with dataMaid - outputs as html
 # makeDataReport(mushrooms, output = "html", replace = TRUE)
@@ -85,6 +91,8 @@ view(mushrooms) # columns are all encoded
 data_split <- initial_split(mushrooms, prop = 0.8)
 train <- training(data_split)
 test <- testing(data_split)
+view(train)
+
 
 # # FIRST ATTEMPT AT DECISION TREE
 # # converting data (which is a list) into a numeric vector so the model can use it
@@ -117,12 +125,32 @@ test <- testing(data_split)
 # but also because it doesn't require the dataset to be a numeric vector
 # so it's simpler
 
-mushrooms$poisonous <- data.frame(cols(mushrooms), poisonous_col$poisonous)
-view(mushrooms)
+view(train)
 
 tree_spec <- decision_tree() %>% # decision tree model specifications
   set_engine("rpart") %>% # same thing as rpart from the first attempt, just a different way
   set_mode("classification")
 
+train["poisonous"] <- lapply(train["poisonous"], factor)
+test["poisonous"] <- lapply(test["poisonous"], factor)
+
 tree_fit <- tree_spec %>%
   fit(poisonous ~ ., data = train)
+
+predictions <- tree_fit %>%
+  predict(test) %>%
+  pull()
+
+metrics <- metric_set(accuracy, kap)
+model_performance <- test %>%
+  mutate(predictions = factor(predictions)) %>%
+  metrics(truth = poisonous, estimate = factor(predictions))
+print(model_performance)
+
+rpart.plot(tree_fit$fit, type = 4, extra = 101, under = TRUE, cex = 0.8, box.palette = "auto")
+rules <- rpart.rules(tree_fit$fit)
+print(rules)
+new_data <- tribble(
+  ~crim, ~zn, ~indus, ~chas, ~nox, ~rm, ~age, ~dis, ~rad, ~tax, ~ptratio, ~black, ~lstat,
+  0.03237, 0, 2.18, 0, 0.458, 6.998, 45.8, 6.0622, 3, 222, 18.7, 394.63, 2.94
+)
