@@ -5,7 +5,11 @@ library(caret) # for one-hot encoding categorical variables (the majority of var
 library(dataMaid) # for auto EDA
 library(DataExplorer) # for auto EDA
 library(caTools) # for splitting data into training and test set
-library(rpart) # for decision tree
+library(rpart) # for decision tree (CART)
+library(rpart.plot) # for plotting decision trees
+library(tree) # FILL IN
+library(vip) # for feature importance (aka how big of an impact each feature has on the target prediction)
+library(pdp) # for feature effects (aka the effect of changes in the value of each feature on the model's predictions)
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv")
@@ -54,11 +58,11 @@ dv <- caret::dummyVars(" ~ cap_shape + cap_surface + cap_color + bruises +
 mushrooms <- data.frame(predict(dv, newdata = mushrooms)) # convert to data frame so it's viewable
 view(mushrooms) # columns are all encoded
 
-# auto EDA with dataMaid - outputs as html
-makeDataReport(mushrooms, output = "html", replace = TRUE)
-
-# auto EDA with DataExplorer - outputs as html
-create_report(mushrooms)
+# # auto EDA with dataMaid - outputs as html
+# makeDataReport(mushrooms, output = "html", replace = TRUE)
+# 
+# # auto EDA with DataExplorer - outputs as html
+# create_report(mushrooms)
 
 # for this particular dataset, auto EDA isn't super useful because of the way the dataset is set up
 # but leaving it in there just in case
@@ -71,3 +75,19 @@ test <- subset(mushrooms, sample == FALSE)
 view(train) # 6500 rows
 view(test) # 1624 rows
 
+# converting data (which is a list) into a numeric vector so the model can understand it
+train <- data.frame(cols=unlist(cols(train)))
+
+# now it's time for the actual machine learning algorithms!
+
+# 1. decision tree (CART) model
+# i'll be using the "rpart" package, which is regarded as being much faster than other packages like "tree"
+dt1 <- rpart(
+  formula = cap_shape.b ~ .,
+  data    = train,
+  method  = "anova" # by default, rpart tries its best to assume what fitting method it uses, but it's best to specify in the beginning
+)
+
+dt1
+
+rpart.plot(dt1)
