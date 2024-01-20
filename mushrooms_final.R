@@ -157,9 +157,16 @@ print(var_importance)
 
 # 2. multivariate adaptive regression splines (MARS)
 mars_fit <- earth(
-  poisonous ~ .,  
-  data = train   
+  poisonous ~ .,
+  data = train,
+  
 )
 
 print(mars_fit)
+
 plot(mars_fit, which = 1)
+
+hyper_grid <- expand.grid(
+  degree = 1:3,
+  nprune = seq(2, 100, length.out = 10) %>% floor()
+)
