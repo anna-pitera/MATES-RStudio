@@ -10,7 +10,7 @@ library(tidymodels) # for decision tree (CART)
 library(tidyr) # for decision tree (CART)
 library(rpart.plot) # for plotting decision trees
 library(vip) # for feature importance (aka how big of an impact each feature has on the target prediction)
-library(xgboost) # for xgboost algorithm
+library(class) # for k-nearest neighbors (KNN)
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv") # includes target column
@@ -100,7 +100,7 @@ dt_metrics <- metric_set(accuracy, kap) # accuracy and kap are the classificatio
 # kap is apparently very useful when one or more classes have large frequency distributions
 dt_model_performance <- test %>%
   mutate(dt_predictions = factor(dt_predictions)) %>%
-  metrics(truth = poisonous, estimate = factor(dt_predictions))
+  dt_metrics(truth = poisonous, estimate = factor(dt_predictions))
 print(dt_model_performance) # accuracy = 0.993, kap = 0.985
 # this high accuracy could be because the dataset is so simple and doesn't have as many feature columns as bigger ML datasets
 # let's look into the model and its rules to see how it got so accurate
@@ -118,31 +118,36 @@ dt_var_importance <- vip(tree_fit, num_features = 10, aes = list(fill = "springg
   ggtitle("Decision Tree Variable Importance")
 print(dt_var_importance)
 
-# 2. xgboost (extreme gradient boosting)
-mushrooms <- subset(mushrooms, select = -c(poisonous)) # drop target column because xgboost doesn't ask you to specify the target column
-view(mushrooms)
-# splitting into train and test sets again, but in a different way this time so it's easier to convert them to matrices later
+# 2. k-nearest neighbors (KNN)
 
-view(poisonous_col)
+# for this knn approach, we need the target column to be in binary ints
+# this is because the scale function doesn't like categorical columns, even if you exclude it with something like [-1]
+train$poisonous <- factor(train$poisonous, levels=c("p", "e"), labels=c(1, 0)) # first convert vectors to factors, then replace with labels
+test$poisonous <- factor(test$poisonous, levels=c("p", "e"), labels=c(1, 0))
+view(train)
+view(test)
 
-num_samples <- round(length(poisonous_col) * .8)
-print(num_samples)
+# TRY DROPPING POISONOUS THEN DOING IT WITHOUT POISONOUS IG?
 
-view(poisonous_col)
+# then convert binary ints poisonous column into a numerical column (because otherwise it's basically being read as a string)
+train$poisonous <- as.numeric(as.factor(train$poisonous))
+test$poisonous <- as.numeric(as.factor(test$poisonous))
 
-train_data <- mushrooms_matrix[1:num_samples,]
-train_labels <- poisonous_col[1:num_samples]
+view(train)
 
-test_data <- mushrooms_matrix[-(1:num_samples),]
-test_labels <- poisonous_col[-(1:num_samples)]
+# scale features of train and test sets
+train_scaled <- scale(train[,-117])
+test_scaled <- scale(test[,-117])
 
-mushrooms_matrix <- data.matrix(mushrooms)
+view(train_scaled)
 
-dtrain <- xgb.DMatrix(data = as.matrix(train_data), label = as.matrix(train_labels))
-dtest <- xgb.DMatrix(data = as.matrix(test_data), label = as.matrix(test_labels))
 
-xgb1 <- xgboost(data = train_matrix,
-                 nround = 2, # max number of boosting iterations
-                 objective = "binary:logistic")  # specify objective function - "binary:logistic" means two-class classification - default is normally linear regression
 
-# 3. 
+# training KNN and predicting
+knn_test_pred <- knn(
+  train = train_scaled, 
+  test = test_scaled,
+  cl = train$poisonous, 
+  k=10
+)
+

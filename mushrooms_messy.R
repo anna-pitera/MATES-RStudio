@@ -12,6 +12,7 @@ library(pdp) # for feature effects (aka the effect of changes in the value of ea
 library(tidymodels) # for second attempt at decision tree (CART)
 library(tidyr) # for second attempt at decision tree
 library(earth) # for multivariate adaptive regression splines (MARS)
+library(xgboost) # for xgboost algorithm
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv") # includes target column (that's why it's called "all")
@@ -170,3 +171,30 @@ hyper_grid <- expand.grid(
   degree = 1:3,
   nprune = seq(2, 100, length.out = 10) %>% floor()
 )
+
+# 2. xgboost (extreme gradient boosting)
+mushrooms <- subset(mushrooms, select = -c(poisonous)) # drop target column because xgboost doesn't ask you to specify the target column
+view(mushrooms)
+# splitting into train and test sets again, but in a different way this time so it's easier to convert them to matrices later
+
+view(poisonous_col)
+
+num_samples <- round(length(poisonous_col) * .8)
+print(num_samples)
+
+view(poisonous_col)
+
+train_data <- mushrooms_matrix[1:num_samples,]
+train_labels <- poisonous_col[1:num_samples]
+
+test_data <- mushrooms_matrix[-(1:num_samples),]
+test_labels <- poisonous_col[-(1:num_samples)]
+
+mushrooms_matrix <- data.matrix(mushrooms)
+
+dtrain <- xgb.DMatrix(data = as.matrix(train_data), label = as.matrix(train_labels))
+dtest <- xgb.DMatrix(data = as.matrix(test_data), label = as.matrix(test_labels))
+
+xgb1 <- xgboost(data = train_matrix,
+                nround = 2, # max number of boosting iterations
+                objective = "binary:logistic")  # specify objective function - "binary:logistic" means two-class classification - default is normally linear regression
