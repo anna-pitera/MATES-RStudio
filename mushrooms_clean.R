@@ -1,6 +1,8 @@
 set.seed(1000) # set seed to ensure that split is the same every time file is run
 library(tidyverse)
 library(ggthemes)
+library(extrafont) # extra fonts for plots
+library(hrbrthemes) # for extra ggplot2 themes
 library(caret) # for one-hot encoding categorical variables (the majority of variables are categorical in this dataset)
 library(dataMaid) # for auto EDA
 library(DataExplorer) # for auto EDA
@@ -11,21 +13,25 @@ library(tidyr) # for decision tree (CART)
 library(rpart.plot) # for plotting decision trees
 library(vip) # for feature importance (aka how big of an impact each feature has on the target prediction)
 library(class) # for k-nearest neighbors (KNN)
+library(MLmetrics) # for calculating KNN accuracy
+library(neuralnet) # for neural network
+library(nnet) # for neural network
+library(devtools) # for running source_url() to get the plot.nnet function for neural network
+source_url('https://gist.githubusercontent.com/fawda123/7471137/raw/466c1474d0a505ff044412703516c34f1a4684a5/nnet_plot_update.r')
+
+# import windows default fonts for graphs
+loadfonts(device = "win")
 
 # read in and view dataset - 8124 rows and 23 columns
 mushrooms <- read_csv("mushrooms.csv") # includes target column
 view(mushrooms)
 
 # check for na values - there are none
-colSums(is.na(mushrooms))
+sum(is.na(mushrooms))
 
 # convert boolean column ("bruises") into binary ints
 mushrooms$bruises <- as.integer(as.logical(mushrooms$bruises))
 view(mushrooms)
-
-# grab poisonous column to save for later
-poisonous_col <- data.frame(mushrooms["poisonous"])
-view(poisonous_col)
 
 # one-hot encoding categorical variables using caret
 colnames(mushrooms) # get col names
@@ -53,7 +59,7 @@ dv <- caret::dummyVars(" ~ cap_shape + cap_surface + cap_color + bruises +
                        stalk_surface_below_ring + stalk_color_above_ring +
                        stalk_color_below_ring + veil_color +
                        ring_number + ring_type + spore_print_color +
-                       population + habitat", data = mushrooms) # assign dummy variables to each column
+                       population + habitat", data = mushrooms, drop2nd = TRUE) # assign dummy variables to each column
 mushrooms <- data.frame(predict(dv, newdata = mushrooms)) # convert to data frame so it's viewable
 view(mushrooms) # columns are all encoded
 
@@ -76,6 +82,8 @@ train <- training(data_split)
 test <- testing(data_split)
 view(train) # 6499 rows
 view(test) # 1625 rows
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # 1. decision tree (CART)
 tree_spec <- decision_tree() %>% # decision tree model specifications
@@ -115,39 +123,118 @@ dt_var_importance <- vip(tree_fit, num_features = 10) # looks at top 10 most imp
 print(dt_var_importance) # just like the tree plot and the written-out rules showed, odor is the most important variable by a lot
 # adding a title and changing the color of the bars
 dt_var_importance <- vip(tree_fit, num_features = 10, aes = list(fill = "springgreen2")) +
-  ggtitle("Decision Tree Variable Importance")
+  ggtitle("Top 10 Decision Tree Variables") +
+  ylab("Importance") +
+  xlab("") +
+  theme(plot.title = element_text(size = 18, family = "Calibri"),
+        axis.title = element_text(family = "Calibri"),
+        axis.line = element_line(colour = "black"))
 print(dt_var_importance)
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # 2. k-nearest neighbors (KNN)
 
-# for this knn approach, we need the target column to be in binary ints
-# this is because the scale function doesn't like categorical columns, even if you exclude it with something like [-1]
-train$poisonous <- factor(train$poisonous, levels=c("p", "e"), labels=c(1, 0)) # first convert vectors to factors, then replace with labels
-test$poisonous <- factor(test$poisonous, levels=c("p", "e"), labels=c(1, 0))
-view(train)
-view(test)
-
-# TRY DROPPING POISONOUS THEN DOING IT WITHOUT POISONOUS IG?
-
-# then convert binary ints poisonous column into a numerical column (because otherwise it's basically being read as a string)
-train$poisonous <- as.numeric(as.factor(train$poisonous))
-test$poisonous <- as.numeric(as.factor(test$poisonous))
-
-view(train)
+# drop all cap_surface variables because for some reason they were messing up the scaling
+# probably will affect the model a little bit, but not to a crazy degree
+train <- subset(train, select = -c(cap_surface.f, cap_surface.g, cap_surface.s, cap_surface.y))
+test <- subset(test, select = -c(cap_surface.f, cap_surface.g, cap_surface.s, cap_surface.y))
 
 # scale features of train and test sets
-train_scaled <- scale(train[,-117])
-test_scaled <- scale(test[,-117])
-
+train_scaled <- scale(train[-113]) # remove 117th column aka target column
+test_scaled <- scale(test[-113])
 view(train_scaled)
-
-
+view(test_scaled)
 
 # training KNN and predicting
 knn_test_pred <- knn(
-  train = train_scaled, 
+  train = train_scaled,
   test = test_scaled,
-  cl = train$poisonous, 
-  k=10
+  cl = train$poisonous, # cl = class labels
+  k = 10 # number of nearest neighbors to consider when making predictions
 )
 
+# model evaluation
+target <- test$poisonous # grab test set target column
+knn_cm <- table(target, knn_test_pred) # cm = confusion matrix
+view(knn_cm)
+
+# calculate accuracy from confusion matrix
+knn_accuracy <- sum(diag(knn_cm))/length(target)
+sprintf("Accuracy: %.2f%%", knn_accuracy*100) # sprintf is a wrapper that returns a character vector containing a formatted combination of text and variable values
+
+# k = 10 got us 99.94% accuracy which is obviously great, but let's see how increasing k can affect the accuracy
+# plot time!
+k_to_try = 1:100 # k = 1 to 100
+acc_k = rep(x = 0, times = length(k_to_try))
+
+for(i in seq_along(k_to_try)) { # seq_along function loops over a vector that stores non-consecutive numbers
+  knn_test_pred = knn(train = train_scaled,
+                      test = test_scaled,
+                      cl = train$poisonous,
+                      k = k_to_try[i])# sequence through k_to_try
+  acc_k[i] = MLmetrics::Accuracy(target, knn_test_pred) # saves accuracy (calculated using Accuracy function from MLmetrics) into acc_k
+}
+acc_k <- data.frame(acc_k) # converts to data frame for plotting
+acc_k$k_num <- 1:100 # adds a 1-100 column for plotting
+view(acc_k)
+ggplot(acc_k, aes(x = k_num, y = acc_k)) +
+  geom_point(color = "dodgerblue1", size = 2) +
+  geom_line() +
+  ggtitle("KNN Accuracy vs Neighbors (K)") +
+  xlab("Number of Neighbors (K)") +
+  ylab("Accuracy") +
+  theme(plot.title = element_text(hjust = 0.5, size = 22, family = "Calibri"), # center align title
+        axis.title = element_text(family = "Calibri"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), # remove grid lines
+        panel.background = element_rect(fill = "white",
+                                        colour = "white",
+                                        size = 0.5, linetype = "solid")) # make background panel white
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+# 3. simple neural network
+
+# calling this "simple" because the package i'm using ("neuralnet") is apparently outdated
+# it's not fully customizable and isn't the best, but it'll be interesting to see how it compares to the decision tree and KNN
+
+# convert target column to binary ints for conversion to numeric later (but only for train set, we're doing something different for test set)
+train$poisonous <- factor(train$poisonous, levels = c("p", "e"), labels = c(1, 0)) # first convert vectors to factors, then replace with labels
+test$poisonous <- factor(test$poisonous, levels = c("p", "e"), labels = c("1", "0"))
+view(train)
+view(test)
+
+# convert poisonous binary ints from factors to numerics
+train <- lapply(train, as.numeric)
+test <- lapply(test, as.numeric)
+
+columns_formula <- poisonous ~ . # save columns for later
+
+view(train)
+nn_model <- neuralnet(
+  columns_formula,
+  data = train,
+  hidden = c(4,2), # 2 hidden layers: 1st layer has 4 neurons, 2nd layer has 2 neurons
+  linear.output = FALSE
+)
+
+plot(nn_model, rep = "best") # plot neural network (not visually appealing at all)
+
+# try another way of plotting neural network (still doesn't look good)
+nn_plot <- nnet(columns_formula, train$poisonous, data = train, size = 1)
+plot.nnet(nn_plot)
+
+view(test)
+
+nn_pred <- predict(nn_model, test)
+labels <- c("p", "e")
+
+prediction_label <- data.frame(nn_pred = labels[max.col(nn_pred)]) %>%
+  mutate(nn_pred_label = labels[max.col(nn_pred)]) %>%
+  select(2) %>%
+  unlist()
+view(nn_pred)
+view(max.col(nn_pred))
+view(prediction_label)
+print(table(test$poisonous, prediction_label)) # print confusion matrix
